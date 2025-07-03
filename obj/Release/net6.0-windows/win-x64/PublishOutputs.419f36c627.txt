@@ -1,1 +1,2 @@
+/project/sandbox/user-workspace/bin/Release/net6.0-windows/win-x64/publish/inpoutx64.dll
 /project/sandbox/user-workspace/bin/Release/net6.0-windows/win-x64/publish/AntiVMSpoofTool.exe
