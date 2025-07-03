@@ -518,3 +518,4 @@
 /project/sandbox/user-workspace/bin/Release/net6.0-windows/win-x64/zh-Hant/UIAutomationTypes.resources.dll
 /project/sandbox/user-workspace/bin/Release/net6.0-windows/win-x64/zh-Hant/WindowsBase.resources.dll
 /project/sandbox/user-workspace/bin/Release/net6.0-windows/win-x64/zh-Hant/WindowsFormsIntegration.resources.dll
+/project/sandbox/user-workspace/bin/Release/net6.0-windows/win-x64/inpoutx64.dll
