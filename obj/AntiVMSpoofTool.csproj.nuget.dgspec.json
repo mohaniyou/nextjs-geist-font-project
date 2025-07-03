@@ -55,9 +55,17 @@
               "version": "[7.0.100-1.23211.1, )",
               "autoReferenced": true
             },
+            "System.Diagnostics.PerformanceCounter": {
+              "target": "Package",
+              "version": "[6.0.0, )"
+            },
             "System.Management": {
               "target": "Package",
               "version": "[6.0.0, )"
+            },
+            "System.Runtime.InteropServices": {
+              "target": "Package",
+              "version": "[4.3.0, )"
             }
           },
           "imports": [
