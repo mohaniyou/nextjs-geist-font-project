@@ -80,22 +80,42 @@ namespace AntiVMSpoofTool.Services
             });
         }
 
-        public static async Task<bool> DetectVirtualization()
+        public static async Task<(bool IsVM, Dictionary<string, bool> Details)> DetectVirtualization()
         {
             return await Task.Run(() =>
             {
+                var detectionResults = new Dictionary<string, bool>();
                 try
                 {
-                    // Check multiple virtualization indicators
-                    if (CheckSystemBiosName() || 
-                        CheckVideoController() || 
-                        CheckProcessorName() || 
-                        CheckSystemManufacturer())
-                    {
-                        return true;
-                    }
+                    // BIOS and System Information
+                    detectionResults["BIOS Signature"] = CheckSystemBiosName();
+                    detectionResults["System Manufacturer"] = CheckSystemManufacturer();
+                    
+                    // Hardware Checks
+                    detectionResults["Video Controller"] = CheckVideoController();
+                    detectionResults["Processor Features"] = CheckProcessorName();
+                    detectionResults["MAC Address"] = CheckMACAddress();
+                    detectionResults["Memory Configuration"] = CheckMemoryConfiguration();
+                    
+                    // Advanced Checks
+                    detectionResults["CPU Instructions"] = CheckCPUInstructions();
+                    detectionResults["Registry Artifacts"] = CheckRegistryArtifacts();
+                    detectionResults["Process List"] = CheckVMProcesses();
+                    detectionResults["Services"] = CheckVMServices();
+                    detectionResults["Driver Signatures"] = CheckDriverSignatures();
+                    detectionResults["Hardware IDs"] = CheckHardwareIDs();
+                    
+                    // Performance Characteristics
+                    detectionResults["Thermal Information"] = CheckThermalInformation();
+                    detectionResults["Storage Characteristics"] = CheckStorageCharacteristics();
+                    
+                    // VM-Specific Files
+                    detectionResults["VM Files"] = CheckVMFiles();
 
-                    return false;
+                    bool isVM = detectionResults.Values.Any(x => x);
+                    Logger.Log($"Virtualization detection completed. Found {detectionResults.Count(x => x.Value)} indicators.");
+                    
+                    return (isVM, detectionResults);
                 }
                 catch (Exception ex)
                 {
@@ -103,6 +123,329 @@ namespace AntiVMSpoofTool.Services
                     throw new Exception("Failed to detect virtualization", ex);
                 }
             });
+        }
+
+        private static bool CheckMACAddress()
+        {
+            try
+            {
+                using (var searcher = new ManagementObjectSearcher("SELECT * FROM Win32_NetworkAdapter WHERE PhysicalAdapter=True"))
+                {
+                    foreach (ManagementObject obj in searcher.Get())
+                    {
+                        string macAddress = obj["MACAddress"]?.ToString()?.ToUpper() ?? "";
+                        // Check for known VM vendor MAC address prefixes
+                        if (macAddress.StartsWith("00:05:69") || // VMware
+                            macAddress.StartsWith("00:0C:29") || // VMware
+                            macAddress.StartsWith("00:1C:14") || // VMware
+                            macAddress.StartsWith("00:50:56") || // VMware
+                            macAddress.StartsWith("08:00:27") || // VirtualBox
+                            macAddress.StartsWith("52:54:00"))   // QEMU/KVM
+                        {
+                            return true;
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.Log($"Error checking MAC address: {ex.Message}");
+            }
+            return false;
+        }
+
+        private static bool CheckMemoryConfiguration()
+        {
+            try
+            {
+                using (var searcher = new ManagementObjectSearcher("SELECT * FROM Win32_ComputerSystem"))
+                {
+                    foreach (ManagementObject obj in searcher.Get())
+                    {
+                        // Check for suspicious memory configurations
+                        ulong totalPhysicalMemory = Convert.ToUInt64(obj["TotalPhysicalMemory"]);
+                        if (totalPhysicalMemory < 2147483648) // Less than 2GB
+                        {
+                            return true;
+                        }
+
+                        // Check if memory is a perfect power of 2 (common in VMs)
+                        double log = Math.Log(totalPhysicalMemory, 2);
+                        if (log == Math.Floor(log))
+                        {
+                            return true;
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.Log($"Error checking memory configuration: {ex.Message}");
+            }
+            return false;
+        }
+
+        private static bool CheckCPUInstructions()
+        {
+            try
+            {
+                // Check if CPU virtualization extensions are exposed
+                using (var searcher = new ManagementObjectSearcher("SELECT * FROM Win32_Processor"))
+                {
+                    foreach (ManagementObject obj in searcher.Get())
+                    {
+                        string features = obj["Description"]?.ToString().ToLower() ?? "";
+                        if (features.Contains("hypervisor") ||
+                            features.Contains("vmx") ||
+                            features.Contains("svm"))
+                        {
+                            return true;
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.Log($"Error checking CPU instructions: {ex.Message}");
+            }
+            return false;
+        }
+
+        private static bool CheckRegistryArtifacts()
+        {
+            try
+            {
+                // Check common VM registry keys
+                string[] vmRegistryPaths = {
+                    @"SYSTEM\CurrentControlSet\Control\VirtualDeviceDrivers",
+                    @"SYSTEM\CurrentControlSet\Services\Disk\Enum",
+                    @"HARDWARE\DEVICEMAP\Scsi\Scsi Port 2",
+                    @"SYSTEM\CurrentControlSet\Control\SystemInformation",
+                    @"SYSTEM\CurrentControlSet\Control\VirtualDeviceDrivers"
+                };
+
+                foreach (string path in vmRegistryPaths)
+                {
+                    using (RegistryKey key = Registry.LocalMachine.OpenSubKey(path))
+                    {
+                        if (key != null)
+                        {
+                            string[] valueNames = key.GetValueNames();
+                            foreach (string value in valueNames)
+                            {
+                                string data = key.GetValue(value)?.ToString().ToLower() ?? "";
+                                if (data.Contains("vmware") ||
+                                    data.Contains("virtual") ||
+                                    data.Contains("vbox") ||
+                                    data.Contains("qemu"))
+                                {
+                                    return true;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.Log($"Error checking registry artifacts: {ex.Message}");
+            }
+            return false;
+        }
+
+        private static bool CheckVMProcesses()
+        {
+            try
+            {
+                string[] vmProcesses = {
+                    "vmtoolsd",
+                    "vmwaretray",
+                    "vmwareuser",
+                    "VGAuthService",
+                    "vmacthlp",
+                    "vboxservice",
+                    "vboxtray",
+                    "vmusrvc",
+                    "prl_tools",
+                    "prl_cc"
+                };
+
+                foreach (var process in System.Diagnostics.Process.GetProcesses())
+                {
+                    if (vmProcesses.Contains(process.ProcessName.ToLower()))
+                    {
+                        return true;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.Log($"Error checking VM processes: {ex.Message}");
+            }
+            return false;
+        }
+
+        private static bool CheckVMServices()
+        {
+            try
+            {
+                string[] vmServices = {
+                    "vmtools",
+                    "vmware",
+                    "vboxservice",
+                    "parallels"
+                };
+
+                using (var searcher = new ManagementObjectSearcher("SELECT * FROM Win32_Service"))
+                {
+                    foreach (ManagementObject service in searcher.Get())
+                    {
+                        string serviceName = service["Name"]?.ToString().ToLower() ?? "";
+                        if (vmServices.Any(vm => serviceName.Contains(vm)))
+                        {
+                            return true;
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.Log($"Error checking VM services: {ex.Message}");
+            }
+            return false;
+        }
+
+        private static bool CheckDriverSignatures()
+        {
+            try
+            {
+                using (var searcher = new ManagementObjectSearcher("SELECT * FROM Win32_SystemDriver"))
+                {
+                    foreach (ManagementObject driver in searcher.Get())
+                    {
+                        string driverName = driver["Name"]?.ToString().ToLower() ?? "";
+                        if (driverName.Contains("vmmouse") ||
+                            driverName.Contains("vmscsi") ||
+                            driverName.Contains("vboxguest") ||
+                            driverName.Contains("vmxnet"))
+                        {
+                            return true;
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.Log($"Error checking driver signatures: {ex.Message}");
+            }
+            return false;
+        }
+
+        private static bool CheckHardwareIDs()
+        {
+            try
+            {
+                using (var searcher = new ManagementObjectSearcher("SELECT * FROM Win32_PnPEntity"))
+                {
+                    foreach (ManagementObject device in searcher.Get())
+                    {
+                        string hardwareID = device["HardwareID"]?.ToString().ToLower() ?? "";
+                        if (hardwareID.Contains("ven_15ad") || // VMware
+                            hardwareID.Contains("ven_80ee") || // VirtualBox
+                            hardwareID.Contains("qemu"))
+                        {
+                            return true;
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.Log($"Error checking hardware IDs: {ex.Message}");
+            }
+            return false;
+        }
+
+        private static bool CheckThermalInformation()
+        {
+            try
+            {
+                using (var searcher = new ManagementObjectSearcher("SELECT * FROM Win32_TemperatureProbe"))
+                {
+                    // Most VMs don't implement temperature sensors
+                    if (!searcher.Get().GetEnumerator().MoveNext())
+                    {
+                        return true;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.Log($"Error checking thermal information: {ex.Message}");
+                // Many VMs will throw an exception here due to missing WMI classes
+                return true;
+            }
+            return false;
+        }
+
+        private static bool CheckStorageCharacteristics()
+        {
+            try
+            {
+                using (var searcher = new ManagementObjectSearcher("SELECT * FROM Win32_DiskDrive"))
+                {
+                    foreach (ManagementObject disk in searcher.Get())
+                    {
+                        string model = disk["Model"]?.ToString().ToLower() ?? "";
+                        string manufacturer = disk["Manufacturer"]?.ToString().ToLower() ?? "";
+                        
+                        if (model.Contains("virtual") ||
+                            model.Contains("vmware") ||
+                            model.Contains("vbox") ||
+                            manufacturer.Contains("vmware") ||
+                            manufacturer.Contains("virtualbox") ||
+                            manufacturer.Contains("qemu"))
+                        {
+                            return true;
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.Log($"Error checking storage characteristics: {ex.Message}");
+            }
+            return false;
+        }
+
+        private static bool CheckVMFiles()
+        {
+            string[] vmPaths = {
+                @"C:\Windows\System32\drivers\vmmouse.sys",
+                @"C:\Windows\System32\drivers\vmhgfs.sys",
+                @"C:\Windows\System32\drivers\VBoxMouse.sys",
+                @"C:\Windows\System32\drivers\VBoxGuest.sys",
+                @"C:\Windows\System32\drivers\VBoxSF.sys",
+                @"C:\Windows\System32\drivers\VBoxVideo.sys",
+                @"C:\Program Files\VMware",
+                @"C:\Program Files\Oracle\VirtualBox Guest Additions"
+            };
+
+            try
+            {
+                foreach (string path in vmPaths)
+                {
+                    if (File.Exists(path) || Directory.Exists(path))
+                    {
+                        return true;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.Log($"Error checking VM files: {ex.Message}");
+            }
+            return false;
         }
 
         private static bool CheckSystemBiosName()
